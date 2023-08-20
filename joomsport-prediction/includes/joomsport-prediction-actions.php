@@ -166,83 +166,104 @@ function jspw_recalcStartdate($rounds){
 }
 
 class JSPredictionsCalc{
-    public static function calculateMatch($match_id,$round_id){
+    public static function calculateMatch($match_id, $round_id){
         global $wpdb;
-        $allredycalc = array();
-        $leagueID = get_post_meta($round_id, '_joomsport_round_leagueid', true);
-        $predLeague = get_post_meta($leagueID,'_jswprediction_league_points',true);
-        $path = JOOMSPORT_PREDICTION_PATH.DIRECTORY_SEPARATOR.'sportleague'.DIRECTORY_SEPARATOR.'base'.DIRECTORY_SEPARATOR.'wordpress'.DIRECTORY_SEPARATOR.'classes'.DIRECTORY_SEPARATOR.'predictions'.DIRECTORY_SEPARATOR;
-        $match = JSPredictionsCalc::getMatch($match_id);
+        $allredycalc = array(); // Tableau pour stocker les scores déjà calculés pour éviter les redondances
+        $leagueID = get_post_meta($round_id, '_joomsport_round_leagueid', true); // Récupère l'identifiant de la ligue à partir des métadonnées de la ronde
+        $predLeague = get_post_meta($leagueID,'_jswprediction_league_points',true); // Récupère les points de prédiction de la ligue à partir des métadonnées de la ligue
+        $path = JOOMSPORT_PREDICTION_PATH.DIRECTORY_SEPARATOR.'sportleague'.DIRECTORY_SEPARATOR.'base'.DIRECTORY_SEPARATOR.'wordpress'.DIRECTORY_SEPARATOR.'classes'.DIRECTORY_SEPARATOR.'predictions'.DIRECTORY_SEPARATOR; // Chemin du dossier des classes de prédiction
+        $match = JSPredictionsCalc::getMatch($match_id); // Récupère les scores du match à partir de la méthode getMatch
 
         if(count($predLeague)){
             $predictionsDBA = array();
-            $predictionsDBAll = $wpdb->get_results("SELECT * FROM {$wpdb->jswprediction_types}");
+            $predictionsDBAll = $wpdb->get_results("SELECT * FROM {$wpdb->jswprediction_types}"); // Récupère toutes les définitions de types de prédiction depuis la table des types de prédiction
             for($intP=0;$intP<count($predictionsDBAll); $intP++){
-                $predictionsDBA[$predictionsDBAll[$intP]->id] = $predictionsDBAll[$intP];
+                $predictionsDBA[$predictionsDBAll[$intP]->id] = $predictionsDBAll[$intP]; // Stocke les définitions de types de prédiction dans un tableau associatif indexé par leur identifiant
             }
 
-            $results = $wpdb->get_results("SELECT * FROM {$wpdb->jswprediction_round_users} WHERE round_id=".$round_id);
+            $results = $wpdb->get_results("SELECT * FROM {$wpdb->jswprediction_round_users} WHERE round_id=".$round_id); // Récupère toutes les prédictions des utilisateurs pour la ronde donnée
             
             for($intA=0;$intA<count($results);$intA++){
-                $points = NULL;
-                $pred = json_decode($results[$intA]->prediction,true);
-                if(isset($pred['score'][$match_id])){
+                $oddPoints = 0;
+                $points = NULL; // Initialise les points à NULL pour chaque prédiction
+                $pred = json_decode($results[$intA]->prediction,true); // Récupère les données de prédiction de l'utilisateur sous forme de tableau associatif
+                //si l'utilisateur a predit la défaite de l'equipe à domicile, recuperer la metadonnée ' loose_odds', si l'utilisateur a predit la victoire de l'equipe à domicile, recuperer la metadonnée ' win_odds', sinon recupérer la métadonnée 'draw_odds'. 
+                
+                
+                // ob_start();
+                // if(isset($pred['score'][$match_id])){
+                //     echo 'tableau' .$allredycalc[$pred['score'][$match_id]["score1"]."-".$pred['score'][$match_id]["score2"]];
+                //     echo 'prediction score1 '.$pred['score'][$match_id]["score1"];
+                //     var_dump($pred['score'][$match_id]["score2"]);
+                //     echo 'prediction score2 '.$pred['score'][$match_id]["score2"];
+                //     echo 'odd points'.$oddPoints;
+                //     var_dump($oddPoints);
+                //     $vcontents = ob_get_contents();
+                // }
+                // ob_end_clean();
+                // error_log($vcontents);
+
+                if(isset($pred['score'][$match_id])){ // Vérifie si l'utilisateur a prédit le score pour le match donné
+
                     if(isset($allredycalc[$pred['score'][$match_id]["score1"]."-".$pred['score'][$match_id]["score2"]])){
-                        $points = $allredycalc[$pred['score'][$match_id]["score1"]."-".$pred['score'][$match_id]["score2"]];
+                        $points = $allredycalc[$pred['score'][$match_id]["score1"]."-".$pred['score'][$match_id]["score2"]]; // Récupère les points calculés précédemment pour éviter les redondances
+
                     }else {
-
-
+                        // Parcourt les types de prédiction de la ligue et vérifie s'ils correspondent à la prédiction de l'utilisateur
                         foreach ($predLeague as $key => $value) {
                             if (isset($predictionsDBA[$key])) {
-                                $predictionsDB = $predictionsDBA[$key];
+                                $predictionsDB = $predictionsDBA[$key]; // Récupère les détails du type de prédiction à partir du tableau des définitions de types de prédiction
                             } else {
-                                die();
+                                die(); // Arrête l'exécution si un type de prédiction n'est pas trouvé
                             }
 
-                            //$predictionsDB = $wpdb->get_row("SELECT * FROM {$wpdb->jswprediction_types} WHERE id={$key}");
-
-                            $classN = 'JSPT' . $predictionsDB->identif;
-                            if (is_file($path . $classN . '.php')) {
-                                require_once $path . $classN . '.php';
+                            $classN = 'JSPT' . $predictionsDB->identif; // Construit le nom de la classe spécifique de prédiction en fonction de son identifiant
+                            if (is_file($path . $classN . '.php')) { // Vérifie si le fichier de la classe existe
+                                require_once $path . $classN . '.php'; // Charge le fichier de la classe de prédiction spécifique
                                 if (class_exists($classN)) {
-                                    $predObject = new $classN;
+                                    $predObject = new $classN; // Crée une instance de la classe de prédiction spécifique
                                     if ($points === NULL) {
-                                        $score_tmp = $predObject->getScore($match, $pred['score'][$match_id]);
+                                        $score_tmp = $predObject->getScore($match, $pred['score'][$match_id]); // Appelle la méthode getScore() de la classe de prédiction spécifique pour vérifier la prédiction
                                         if ($score_tmp === true) {
-
-                                            $points = $value;
+                                            if(($predictionsDB->identif == 'ScoreWinner')){
+                                                if(($pred['score'][$match_id]["score1"]) - ($pred['score'][$match_id]["score2"]) < 0 ){
+                                                    $oddPoints = floatval(get_post_meta($match_id,'loose_odds',true))*10;
+                                                }
+                                                if(($pred['score'][$match_id]["score1"]) - ($pred['score'][$match_id]["score2"]) > 0 ){
+                                                    $oddPoints = floatval(get_post_meta($match_id,'win_odds',true))*10;
+                                                }
+                                                if(($pred['score'][$match_id]["score1"]) - ($pred['score'][$match_id]["score2"]) === 0){
+                                                    $oddPoints = floatval(get_post_meta($match_id,'draw_odds',true))*10;
+                                                }
+                                                $points = $value + $oddPoints ; // Si la prédiction est correcte, attribue les points définis pour ce type de prédiction
+                                            }
                                         }
+                                            
                                     } elseif ($predictionsDB->identif == 'ScoreBonus') {
-                                        $score_tmp = $predObject->getScore($match, $pred['score'][$match_id]);
+                                        $score_tmp = $predObject->getScore($match, $pred['score'][$match_id]); // Vérifie à nouveau la prédiction si le type de prédiction est un bonus de score
                                         if ($score_tmp === true) {
-
-                                            $points += $value;
+                                            $points += $value; // Si la prédiction est correcte, ajoute les points définis pour ce type de prédiction (score bonus)
                                         }
                                     }
-
                                 }
                             }
-
                         }
                     }
-                    $points_before_joker = $points;
+                    $points_before_joker = $points; // Stocke les points avant d'appliquer le joker (si nécessaire)
                     if(isset($pred['score'][$match_id]["joker"]) && $pred['score'][$match_id]["joker"] == 1 && $points){
-                        $points *=2;
+                        $points *=2; // Double les points si le joker est activé pour cette prédiction
                     }
 
                     if ($points == NULL) {
-                        $points = 0;
+                        $points = 0; // Si aucun point n'a été attribué, initialise à 0
                     }
                     if ($points !== NULL) {
-                        $pred['score'][$match_id]['points'] = $points;
-                        $wpdb->query("UPDATE {$wpdb->jswprediction_round_users} SET prediction='" . addslashes(json_encode($pred)) . "'  WHERE id=" . $results[$intA]->id);
+                        $pred['score'][$match_id]['points'] = $points; // Met à jour le tableau des scores prédits avec les points attribués
+                        $wpdb->query("UPDATE {$wpdb->jswprediction_round_users} SET prediction='" . addslashes(json_encode($pred)) . "'  WHERE id=" . $results[$intA]->id); // Met à jour la base de données avec les nouvelles données de prédiction pour l'utilisateur
                     }
-                    $allredycalc[$pred['score'][$match_id]["score1"] . "-" . $pred['score'][$match_id]["score2"]] = $points_before_joker;
-
-                    
+                    $allredycalc[$pred['score'][$match_id]["score1"] . "-" . $pred['score'][$match_id]["score2"]] = $points_before_joker; // Stocke les points calculés pour éviter les redondances
                 }
             }
-
         }
     }
     public static function getMatch($match_id){
@@ -493,6 +514,7 @@ class JSPredictionsCalc{
         
     }
 }
+
 /*<!--jsonlyinproPHP-->*/
 function joomsport_prediction_matchblock($match_id){
     global $wpdb;
