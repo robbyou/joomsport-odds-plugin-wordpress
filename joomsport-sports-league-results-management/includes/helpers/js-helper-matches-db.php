@@ -94,17 +94,22 @@ class jsHelperMatchesDB
 
     public static function updateMatchDB($matchID){
         global $wpdb;
-
-        $metas = get_post_meta($matchID,'',true);
-
+    
+        // Récupérer toutes les métadonnées du match (post) depuis la table wp_postmeta
+        $metas = get_post_meta($matchID, '', true);
+    
+        // Obtenir l'ID du terme (taxonomie) de joomsport_matchday associé au match
+        // à partir des tables wp_term_relationships et wp_term_taxonomy
         $query = "SELECT tt.term_id "
             ." FROM {$wpdb->term_relationships} as tr"
             ." JOIN {$wpdb->term_taxonomy} as tt ON tt.term_taxonomy_id = tr.term_taxonomy_id"
             ." WHERE tr.object_id = %d AND tt.taxonomy='joomsport_matchday' LIMIT 1";
         $mdID = $wpdb->get_var($wpdb->prepare($query, $matchID));
-
+    
+        // Vérifier si l'ID du terme a été trouvé
         if ( $mdID ){
-
+    
+            // Récupérer la durée du match depuis les métadonnées _joomsport_match_general
             $duration = 0;
             if(isset($metas["_joomsport_match_general"][0])){
                 $metadata = $metas["_joomsport_match_general"][0];
@@ -112,35 +117,41 @@ class jsHelperMatchesDB
                     $duration = $metadata['match_duration'];
                 }
             }
-
+    
+            // Vérifier si la date du match est au format valide (AAAA-MM-JJ)
+            // Si la date n'est pas valide, la mettre à '0000-00-00'
             if (!preg_match("/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$/",$metas["_joomsport_match_date"][0])) {
                 $metas["_joomsport_match_date"][0] = '0000-00-00';
             }
-
-            $group_id = isset($metas["_joomsport_groupID"][0])?intval($metas["_joomsport_groupID"][0]):0;
-            $query = "INSERT INTO {$wpdb->joomsport_matches}(postID,mdID,seasonID,teamHomeID,teamAwayID,groupID,status,date,time,scoreHome,scoreAway,duration)";
-            $query .= " VALUES(%d, %d, %d, %d, %d, %d, %d, %s, %s, %f, %f, %d)";
+    
+            // Obtenir l'ID du groupe du match à partir des métadonnées _joomsport_groupID
+            // Si l'ID du groupe n'est pas défini, le mettre à 0
+            $group_id = isset($metas["_joomsport_groupID"][0]) ? intval($metas["_joomsport_groupID"][0]) : 0;
+    
+            // Construire la requête SQL pour insérer ou mettre à jour les données du match dans la table wp_joomsport_matches
+            $query = "INSERT INTO {$wpdb->joomsport_matches}(postID,mdID,seasonID,teamHomeID,teamAwayID,groupID,status,date,time,scoreHome,scoreAway,duration,win_odds,loose_odds,draw_odds)";
+            $query .= " VALUES(%d, %d, %d, %d, %d, %d, %d, %s, %s, %f, %f, %d, %f, %f, %f)";
             $query .= " ON DUPLICATE KEY UPDATE mdID = %d,seasonID = %d,"
                 ."teamHomeID = %d,teamAwayID = %d,groupID = %d,"
-                ."status = %d,date = %s,time = %s,scoreHome = %f,scoreAway = %f,duration = %d";
+                ."status = %d,date = %s,time = %s,scoreHome = %f,scoreAway = %f,duration = %d,win_odds = %f,loose_odds = %f,draw_odds = %f";
 
+            // Exécuter la requête préparée avec les valeurs correspondantes pour mettre à jour ou insérer le match
             $res = $wpdb->query(
                 $wpdb->prepare(
-                    $query, $matchID, $mdID, intval($metas["_joomsport_seasonid"][0]), intval($metas["_joomsport_home_team"][0]), intval($metas["_joomsport_away_team"][0]), $group_id, intval($metas["_joomsport_match_played"][0]), $metas["_joomsport_match_date"][0], $metas["_joomsport_match_time"][0], $metas["_joomsport_home_score"][0], $metas["_joomsport_away_score"][0], $duration
-                    , $mdID, $metas["_joomsport_seasonid"][0], $metas["_joomsport_home_team"][0], intval($metas["_joomsport_away_team"][0]), $group_id, $metas["_joomsport_match_played"][0], $metas["_joomsport_match_date"][0], $metas["_joomsport_match_time"][0], $metas["_joomsport_home_score"][0], $metas["_joomsport_away_score"][0], $duration
+                    $query, $matchID, $mdID, intval($metas["_joomsport_seasonid"][0]), intval($metas["_joomsport_home_team"][0]), intval($metas["_joomsport_away_team"][0]), $group_id, intval($metas["_joomsport_match_played"][0]), $metas["_joomsport_match_date"][0], $metas["_joomsport_match_time"][0], $metas["_joomsport_home_score"][0], $metas["_joomsport_away_score"][0], $duration, floatval($metas['win_odds'][0]), floatval($metas['loose_odds'][0]), floatval($metas['draw_odds'][0])
+                    , $mdID, intval($metas["_joomsport_seasonid"][0]), intval($metas["_joomsport_home_team"][0]), intval($metas["_joomsport_away_team"][0]), $group_id, intval($metas["_joomsport_match_played"][0]), $metas["_joomsport_match_date"][0], $metas["_joomsport_match_time"][0], $metas["_joomsport_home_score"][0], $metas["_joomsport_away_score"][0], $duration, floatval($metas['win_odds'][0]), floatval($metas['loose_odds'][0]), floatval($metas['draw_odds'][0])
                 )
             );
-            if($wpdb->last_error !== '') :
+    
+            // Vérifier s'il y a des erreurs lors de l'exécution de la requête
+            // et les imprimer si nécessaire
+            if($wpdb->last_error !== '') {
                 $wpdb->print_error();
-
-            endif;
-
-
-            ///update teamstats
+            }
+    
+            // Mettre à jour la table wp_joomsport_teamstats en supprimant les enregistrements de la saison actuelle
             $wpdb->query("DELETE FROM {$wpdb->joomsport_teamstats} WHERE seasonID=".intval($metas["_joomsport_seasonid"][0]));
         }
-
-
-
     }
+    
 }
