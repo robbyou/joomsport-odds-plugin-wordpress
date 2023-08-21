@@ -50,14 +50,20 @@ $joker_match = classJsportUserround::enableJoker();
                         <?php echo __('Participant','joomsport-prediction');?>
 
                     </div>
+                    <div class="jstable-cell jsalcenter oddsCell">
+                        <span>COTES</span>
+                        <div class="oddsCells">
+                            <div><?php echo __('V','joomsport-prediction');?></div>
+                            <div><?php echo __('D','joomsport-prediction');?></div>
+                            <div><?php echo __('E','joomsport-prediction');?></div>
+                        </div>
+                    </div>
                     <div class="jstable-cell jsalcenter">
                         <?php echo __('Prediction','joomsport-prediction');?>
-
                     </div>
                     <div class="jstable-cell jsalcenter">
                         <?php echo __('FT','joomsport-prediction');?>
                         <?php echo __('Score','joomsport-prediction');?>
-
                     </div>
                     <div class="jstable-cell jsalcenter">
                         <?php echo __('Points','joomsport-prediction');?>
@@ -78,12 +84,16 @@ $joker_match = classJsportUserround::enableJoker();
             <?php
             for ($intA = 0; $intA < count($lists['matches']); ++$intA) {
                 $match = $lists['matches'][$intA];
+                //$match_odds = get_post_meta($match->id, '_joomsport_match_odds', true);
+                $win_odds = get_post_meta($match->id, 'win_odds', true);
+                $loose_odds = get_post_meta($match->id, 'loose_odds', true); 
+                $draw_odds = get_post_meta($match->id, 'draw_odds', true);
                 ?>
                 <div class="jstable-row">
                     <div class="jstable-cell">
                         <?php
-                        $m_date = get_post_meta( $match->id, '_joomsport_match_date', true );
-                        $m_time = get_post_meta( $match->id, '_joomsport_match_time', true );
+                        $m_date = get_post_meta($match->id, '_joomsport_match_date', true);
+                        $m_time = get_post_meta($match->id, '_joomsport_match_time', true);
                         $match_date = classJsportDate::getDate($m_date, $m_time);
                         echo $match_date;
                         ?>
@@ -110,6 +120,17 @@ $joker_match = classJsportUserround::enableJoker();
                         ?>
                         </div>
                     </div>
+                    <div class="jstable-cell jsalcenter">
+                        <div><?php
+                        echo ($win_odds != 0) ? $win_odds : '';
+                        ?></div>
+                        <div><?php
+                        echo ($loose_odds != 0) ? $loose_odds : '';
+                        ?></div>
+                        <div><?php
+                        echo ($draw_odds != 0) ? $draw_odds : '';
+                        ?></div>
+                    </div>
                     <div class="jstable-cell jsalcenter" style="white-space: nowrap;">
                         <?php
                         echo $rows->getPredict($match->id);
@@ -128,10 +149,8 @@ $joker_match = classJsportUserround::enableJoker();
                     <?php
                     if($joker_match){
                         echo '<div class="jstable-cell jsalcenter">';
-
                         echo $rows->getMatchJoker($match->id);
                         echo '</div>';
-
                     }
                     ?>
                 </div>
@@ -143,7 +162,6 @@ $joker_match = classJsportUserround::enableJoker();
     </div>
     <?php
     if($rows->canSave()){
-
     ?>
     <div>
         <input type="hidden" name="jspJoker" id="jspJoker" value="<?php echo $rows->joker_match;?>" />
